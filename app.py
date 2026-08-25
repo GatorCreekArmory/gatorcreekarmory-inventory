@@ -8,6 +8,36 @@ CORS(app)
 
 GUNBROKER_API = "https://api.gunbroker.com/v1"
 
+
+def get_access_token():
+    dev_key = os.environ.get("GUNBROKER_DEV_KEY")
+    username = os.environ.get("GUNBROKER_USERNAME")
+    password = os.environ.get("GUNBROKER_PASSWORD")
+
+    if not dev_key or not username or not password:
+        return None, "GunBroker credentials are not fully configured."
+
+    response = requests.post(
+        f"{GUNBROKER_API}/Users/AccessToken",
+        headers={
+            "X-DevKey": dev_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        json={
+            "Username": username,
+            "Password": password,
+        },
+        timeout=15,
+    )
+
+    if not response.ok:
+        return None, f"GunBroker login failed with status {response.status_code}."
+
+    data = response.json()
+    return data.get("AccessToken"), None
+
+
 @app.route("/")
 def home():
     return jsonify({
@@ -15,38 +45,48 @@ def home():
         "service": "Gator Creek Armory Inventory"
     })
 
+
 @app.route("/inventory")
 def inventory():
     dev_key = os.environ.get("GUNBROKER_DEV_KEY")
-    access_token = os.environ.get("GUNBROKER_ACCESS_TOKEN")
 
-    if not dev_key or not access_token:
+    if not dev_key:
         return jsonify({
-            "error": "GunBroker API credentials have not been configured yet."
+            "error": "GunBroker DevKey is not configured."
         }), 503
+
+    access_token, error = get_access_token()
+
+    if error:
+        return jsonify({"error": error}), 503
 
     headers = {
         "X-DevKey": dev_key,
         "X-AccessToken": access_token,
-        "Accept": "application/json"
+        "Content-Type": "application/json",
+        "Accept": "application/json",
     }
 
     try:
         response = requests.get(
             f"{GUNBROKER_API}/ItemsSelling",
             headers=headers,
-            timeout=15
+            params={
+                "TimeFrame": 0,
+                "PageSize": 100
+            },
+            timeout=15,
         )
 
         if not response.ok:
             return jsonify({
-                "error": "GunBroker API request failed.",
+                "error": "GunBroker inventory request failed.",
                 "status": response.status_code
             }), response.status_code
 
         return jsonify(response.json())
 
-    except requests.RequestException as exc:
+    except requests.RequestException:
         return jsonify({
             "error": "Unable to contact GunBroker."
         }), 502
