@@ -6,10 +6,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# GunBroker Production API
 GUNBROKER_API = "https://api.gunbroker.com/v1"
-
-# This must match the User-Agent you sent GunBroker for whitelisting
 USER_AGENT = "GatorCreekArmory/GatorCreekArmory/1.0/InventorySync"
 
 _cached_token = None
@@ -54,7 +51,6 @@ def get_access_token():
         raise RuntimeError("GunBroker did not return an access token.")
 
     _cached_token = data["accessToken"]
-
     return _cached_token
 
 
@@ -77,11 +73,9 @@ def get_selling_items():
         timeout=15
     )
 
-    # If the token expires, get a fresh one and retry once
     if response.status_code == 401:
         _cached_token = None
         token = get_access_token()
-
         headers["X-AccessToken"] = token
 
         response = requests.get(
@@ -110,11 +104,37 @@ def inventory():
         if not response.ok:
             return jsonify({
                 "error": "GunBroker API request failed.",
-                "status": response.status_code,
-                "details": response.text
+                "status": response.status_code
             }), response.status_code
 
-        return jsonify(response.json())
+        data = response.json()
+        cleaned = []
+
+        for item in data.get("results", []):
+            item_id = item.get("itemID")
+
+            price = (
+                item.get("buyNowPrice")
+                or item.get("fixedPrice")
+                or item.get("currentBid")
+                or item.get("startingBid")
+                or item.get("minimumBid")
+                or 0
+            )
+
+            cleaned.append({
+                "id": item_id,
+                "title": item.get("title", "GunBroker Listing"),
+                "price": price,
+                "image": item.get("thumbnailURL", ""),
+                "url": f"https://www.gunbroker.com/item/{item_id}",
+                "watchers": item.get("watchersCount", 0)
+            })
+
+        return jsonify({
+            "count": len(cleaned),
+            "items": cleaned
+        })
 
     except requests.RequestException as exc:
         return jsonify({
