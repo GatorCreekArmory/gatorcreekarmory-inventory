@@ -50,12 +50,10 @@ def get_access_token():
 
     data = response.json()
 
-    if "AccessToken" not in data:
-        raise RuntimeError(
-            f"GunBroker did not return an AccessToken. Response: {data}"
-        )
+   if "accessToken" not in data:
+    raise RuntimeError("GunBroker did not return an access token.")
 
-    _cached_token = data["AccessToken"]
+_cached_token = data["accessToken"]
 
     return _cached_token
 
