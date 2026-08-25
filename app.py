@@ -6,7 +6,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Sandbox API while we're testing
+# GunBroker Sandbox API while testing
 GUNBROKER_API = "https://api.sandbox.gunbroker.com/v1"
 
 USER_AGENT = "GatorCreekArmory/GatorCreekArmory/1.0/InventorySync"
@@ -44,16 +44,16 @@ def get_access_token():
 
     if not response.ok:
         raise RuntimeError(
-            f"GunBroker login failed with status {response.status_code}. "
-            f"Response: {response.text}"
+            f"GunBroker login failed with status {response.status_code}."
         )
 
     data = response.json()
 
-   if "accessToken" not in data:
-    raise RuntimeError("GunBroker did not return an access token.")
+    # GunBroker returns "accessToken" with a lowercase a
+    if "accessToken" not in data:
+        raise RuntimeError("GunBroker did not return an access token.")
 
-_cached_token = data["accessToken"]
+    _cached_token = data["accessToken"]
 
     return _cached_token
 
@@ -67,7 +67,6 @@ def get_selling_items():
     headers = {
         "X-DevKey": dev_key,
         "X-AccessToken": token,
-        "Content-Type": "application/json",
         "Accept": "application/json",
         "User-Agent": USER_AGENT
     }
@@ -78,7 +77,7 @@ def get_selling_items():
         timeout=15
     )
 
-    # If the access token expired, get a new one and retry once
+    # If the token expires, get a fresh token and retry once
     if response.status_code == 401:
         _cached_token = None
         token = get_access_token()
