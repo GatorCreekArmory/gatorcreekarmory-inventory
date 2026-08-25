@@ -6,7 +6,10 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
+# GunBroker Production API
 GUNBROKER_API = "https://api.gunbroker.com/v1"
+
+# Must match the User-Agent GunBroker whitelisted
 USER_AGENT = "GatorCreekArmory/GatorCreekArmory/1.0/InventorySync"
 
 _cached_token = None
@@ -51,6 +54,7 @@ def get_access_token():
         raise RuntimeError("GunBroker did not return an access token.")
 
     _cached_token = data["accessToken"]
+
     return _cached_token
 
 
@@ -73,9 +77,11 @@ def get_selling_items():
         timeout=15
     )
 
+    # If token expires, get a new one and retry once
     if response.status_code == 401:
         _cached_token = None
         token = get_access_token()
+
         headers["X-AccessToken"] = token
 
         response = requests.get(
@@ -113,19 +119,57 @@ def inventory():
         for item in data.get("results", []):
             item_id = item.get("itemID")
 
-            price = (
-                item.get("buyNowPrice")
-                or item.get("fixedPrice")
-                or item.get("currentBid")
-                or item.get("startingBid")
-                or item.get("minimumBid")
-                or 0
-            )
+            current_bid = float(item.get("currentBid") or 0)
+            starting_bid = float(item.get("startingBid") or 0)
+            buy_now_price = float(item.get("buyNowPrice") or 0)
+            fixed_price = float(item.get("fixedPrice") or 0)
+            bid_count = int(item.get("bidCount") or 0)
+
+            # PRICE DISPLAY LOGIC:
+            #
+            # If somebody has bid:
+            #     show CURRENT BID
+            #
+            # If auction has no bids yet:
+            #     show STARTING BID
+            #
+            # If it's a fixed-price listing:
+            #     show fixed / Buy Now price
+
+            if current_bid > 0:
+                display_price = current_bid
+                price_label = "Current Bid"
+
+            elif starting_bid > 0:
+                display_price = starting_bid
+                price_label = "Starting Bid"
+
+            elif fixed_price > 0:
+                display_price = fixed_price
+                price_label = "Price"
+
+            elif buy_now_price > 0:
+                display_price = buy_now_price
+                price_label = "Buy Now"
+
+            else:
+                display_price = 0
+                price_label = "View Listing"
 
             cleaned.append({
                 "id": item_id,
                 "title": item.get("title", "GunBroker Listing"),
-                "price": price,
+
+                # Keeps your existing Squarespace code working
+                "price": display_price,
+
+                # Extra information we'll use for improved display
+                "priceLabel": price_label,
+                "currentBid": current_bid,
+                "startingBid": starting_bid,
+                "buyNowPrice": buy_now_price,
+                "bidCount": bid_count,
+
                 "image": item.get("thumbnailURL", ""),
                 "url": f"https://www.gunbroker.com/item/{item_id}",
                 "watchers": item.get("watchersCount", 0)
